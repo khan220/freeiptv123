@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ur">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Smart TV Player (Neon Glass Controls)</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<style>
+  body {
+    margin: 0;
+    background: radial-gradient(circle at center, #020b16, #000);
+    display: flex;
+    height: 100vh;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: #fff;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 260px;
+    background: rgba(2, 15, 30, 0.9);
+    box-shadow: 3px 0 20px rgba(0, 183, 255, 0.3);
+    backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(0, 183, 255, 0.3);
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    transform: translateX(-100%);
+    opacity: 0;
+    transition: transform 0.4s ease, opacity 0.4s ease;
+    z-index: 6;
+  }
+  .sidebar.show { transform: translateX(0); opacity: 1; }
+
+  .sidebar h2 {
+    text-align: center;
+    font-size: 16px;
+    margin: 15px 0 8px;
+    color: #00bfff;
+    text-shadow: 0 0 8px #00bfff;
+  }
+
+  .search-box { padding: 0 12px; margin-bottom: 8px; }
+  .search-box input {
+    width: 100%; padding: 8px; border-radius: 6px;
+    border: 1px solid rgba(0,183,255,0.4);
+    background: rgba(0,10,20,0.6);
+    color: #00bfff; font-size: 14px; outline: none;
+    box-shadow: 0 0 8px rgba(0,183,255,0.2);
+  }
+
+  .channels-container { flex: 1; overflow-y: auto; padding-bottom: 15px; }
+  .channel {
+    display: flex; align-items: center;
+    padding: 8px 10px; cursor: pointer;
+    border-bottom: 1px solid rgba(0,183,255,0.1);
+    transition: background 0.25s, transform 0.2s;
+  }
+  .channel:hover, .channel.active {
+    background: rgba(0,183,255,0.2);
+    transform: translateX(5px);
+    box-shadow: inset 0 0 10px rgba(0,183,255,0.3);
+  }
+  .channel img {
+    width: 38px; height: 38px; margin-right: 10px;
+    border-radius: 6px;
+    box-shadow: 0 0 8px rgba(0,183,255,0.4);
+  }
+
+  /* Player */
+  .player-area {
+    flex: 1;
+    position: relative;
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: filter 0.3s ease;
+  }
+  .player-area.dim { filter: brightness(0.4) blur(2px); }
+
+  video {
+    width: 90%;
+    height: 90%;
+    object-fit: contain;
+    border-radius: 12px;
+    background: #000;
+    box-shadow: 0 0 35px rgba(0,183,255,0.2);
+  }
+
+  /* Live Logo */
+  .live-logo {
+    position: absolute;
+    top: 60px;
+    left: 15px;
+    background: rgba(0,15,25,0.7);
+    padding: 6px 10px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(0,183,255,0.3);
+    box-shadow: 0 0 12px rgba(0,183,255,0.4);
+  }
+  .live-logo img { width: 38px; height: 38px; border-radius: 6px; }
+  .live-text { color: #00bfff; font-weight: bold; font-size: 13px; text-shadow: 0 0 6px #00bfff; }
+  .channel-name { font-size: 13px; color: #fff; font-weight: bold; }
+
+  /* Toggle Button */
+  .toggle-btn {
+    position: absolute;
+    top: 15px; left: 15px;
+    background: rgba(0,10,25,0.8);
+    border: 1px solid rgba(0,183,255,0.4);
+    color: #00bfff; padding: 8px 14px;
+    border-radius: 8px; cursor: pointer;
+    font-size: 14px; backdrop-filter: blur(10px);
+    z-index: 10;
+  }
+
+  /* Glass Control Bar */
+  .controls {
+    position: absolute;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 30px;
+    background: rgba(0,15,30,0.55);
+    padding: 12px 28px;
+    border-radius: 20px;
+    border: 1px solid rgba(0,183,255,0.4);
+    box-shadow: 0 0 25px rgba(0,183,255,0.3);
+    backdrop-filter: blur(10px);
+    z-index: 10;
+  }
+
+  .ctrl-btn {
+    background: transparent;
+    border: none;
+    color: #00bfff;
+    font-size: 24px;
+    cursor: pointer;
+    text-shadow: 0 0 8px #00bfff;
+    transition: transform 0.2s, color 0.2s;
+  }
+
+  .ctrl-btn:hover {
+    color: #fff;
+    transform: scale(1.2);
+  }
+</style>
+</head>
+<body>
+
+<div class="sidebar" id="sidebar">
+  <h2>📺 CHANNELS</h2>
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="🔍 Search Channel...">
+  </div>
+  <div class="channels-container" id="channelList"></div>
+</div>
+
+<div class="player-area" id="playerArea">
+  <video id="player" controls autoplay muted></video>
+
+  <div class="live-logo" id="liveLogo">
+    <img id="currentLogo" src="">
+    <div>
+      <div class="live-text">LIVE</div>
+      <div class="channel-name" id="channelName"></div>
+    </div>
+  </div>
+
+  <button class="toggle-btn" id="toggleBtn">📺 Channels</button>
+
+  <!-- Transparent Floating Control Bar -->
+  <div class="controls">
+    <button class="ctrl-btn" id="prevBtn">⏮️</button>
+    <button class="ctrl-btn" id="playPauseBtn">⏯️</button>
+    <button class="ctrl-btn" id="nextBtn">⏭️</button>
+  </div>
+</div>
+
+<script>
+const channels = [
+  { name: "Animal Planet", url: "https://fl31.moveonjoy.com/Animal_Planet/tracks-v1a1/mono.ts.m3u8", logo: "https://upload.wikimedia.org/wikipedia/en/5/5c/Animal_Planet_logo.svg" },
+  { name: "BBC News", url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", logo: "https://upload.wikimedia.org/wikipedia/commons/3/3f/BBC_News.png" },
+  { name: "Discovery", url: "https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8", logo: "https://upload.wikimedia.org/wikipedia/commons/f/f4/Discovery_Channel_logo_2019.svg" },
+  { name: "National Geographic", url: "https://d2v6cdnq4x2fz1.cloudfront.net/natgeo.m3u8", logo: "https://upload.wikimedia.org/wikipedia/commons/9/9a/National_Geographic_Channel_logo.svg" },
+  { name: "History TV", url: "https://d2v6cdnq4x2fz1.cloudfront.net/history.m3u8", logo: "https://upload.wikimedia.org/wikipedia/commons/1/1b/History_TV_18_India_Logo.svg" },
+  { name: "CNN", url: "https://d2v6cdnq4x2fz1.cloudfront.net/cnn.m3u8", logo: "https://upload.wikimedia.org/wikipedia/commons/b/b1/CNN.svg" }
+];
+
+const sidebar = document.getElementById('sidebar');
+const player = document.getElementById('player');
+const playerArea = document.getElementById('playerArea');
+const currentLogo = document.getElementById('currentLogo');
+const channelName = document.getElementById('channelName');
+const toggleBtn = document.getElementById('toggleBtn');
+const searchInput = document.getElementById('searchInput');
+const channelList = document.getElementById('channelList');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const playPauseBtn = document.getElementById('playPauseBtn');
+let hls;
+let activeIndex = 0;
+
+function playStream(ch, index) {
+  if (hls) { hls.destroy(); hls = null; }
+  if (Hls.isSupported()) {
+    hls = new Hls();
+    hls.loadSource(ch.url);
+    hls.attachMedia(player);
+  } else if (player.canPlayType('application/vnd.apple.mpegurl')) {
+    player.src = ch.url;
+  }
+  currentLogo.src = ch.logo;
+  channelName.textContent = ch.name;
+  sidebar.classList.remove('show');
+  playerArea.classList.remove('dim');
+  highlightChannel(index);
+}
+
+function highlightChannel(index) {
+  document.querySelectorAll('.channel').forEach((el, i) => {
+    el.classList.toggle('active', i === index);
+  });
+  activeIndex = index;
+}
+
+function createChannelList(list) {
+  channelList.innerHTML = "";
+  list.forEach((ch, i) => {
+    const div = document.createElement('div');
+    div.className = 'channel';
+    div.innerHTML = `<img src="${ch.logo}" alt="${ch.name}"><span>${ch.name}</span>`;
+    div.onclick = () => playStream(ch, i);
+    channelList.appendChild(div);
+  });
+}
+
+toggleBtn.onclick = () => {
+  const open = sidebar.classList.toggle('show');
+  playerArea.classList.toggle('dim', open);
+};
+prevBtn.onclick = () => {
+  activeIndex = (activeIndex - 1 + channels.length) % channels.length;
+  playStream(channels[activeIndex], activeIndex);
+};
+nextBtn.onclick = () => {
+  activeIndex = (activeIndex + 1) % channels.length;
+  playStream(channels[activeIndex], activeIndex);
+};
+playPauseBtn.onclick = () => player.paused ? player.play() : player.pause();
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') nextBtn.click();
+  if (e.key === 'ArrowLeft') prevBtn.click();
+});
+searchInput.addEventListener('input', () => {
+  const val = searchInput.value.toLowerCase();
+  const filtered = channels.filter(ch => ch.name.toLowerCase().includes(val));
+  createChannelList(filtered);
+  highlightChannel(0);
+});
+createChannelList(channels);
+playStream(channels[0], 0);
+</script>
+</body>
+</html>
